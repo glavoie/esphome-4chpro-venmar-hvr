@@ -1,0 +1,159 @@
+esphome:
+  name: echangeur-air
+  friendly_name: "Échangeur d'air"
+
+
+esp8266:
+  restore_from_flash: true
+  board: esp8285
+
+
+# Enable logging
+logger:
+
+
+# Enable Home Assistant API.
+api:
+  encryption:
+    key: !secret api_key
+
+
+# Enable OTA firmware update.
+ota:
+  password: !secret admin_password
+
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  on_connect:
+    - output.turn_on: blue_led
+  on_disconnect:
+    - output.turn_off: blue_led
+
+  # Enable Access Point in case WiFi connection fails.
+  ap:
+    ssid: "Échangeur d'air (4CHPRO)"
+    password: !secret admin_password
+
+
+# Intermittent mode. Runs for 20 minutes on slow speed, then stop for 40 minutes.
+script:
+  - id: demarrage_intermittent
+    then:
+      - script.stop: arret_40min
+      - script.execute: lent_20min
+
+  - id: arret_intermittent
+    then:
+      - script.stop: lent_20min
+      - script.stop: arret_40min
+
+  - id: lent_20min
+    mode: single
+    then:
+      - switch.turn_on: lent
+      - delay: 20min
+      - script.execute: arret_40min
+
+  - id: arret_40min
+    mode: single
+    then:
+      - switch.turn_off: lent
+      - switch.turn_off: rapide
+      - delay: 40min
+      - script.execute: lent_20min
+
+
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: GPIO0
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    name: "Vitesse lente (R1)"
+    on_press:
+      - switch.turn_on: lent
+
+  - platform: gpio
+    pin:
+      number: GPIO9
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    name: "Vitesse rapide (R2)"
+    on_press:
+      - switch.turn_on: rapide
+
+  - platform: gpio
+    pin:
+      number: GPIO10
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    name: "Intermittent: 20m lent/40m arrêt (R3)"
+    on_press:
+      - switch.turn_on: intermittent
+
+  - platform: gpio
+    pin:
+      number: GPIO14
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    name: "Arrêt complet (R4)"
+    on_press:
+      - switch.turn_off: lent
+      - switch.turn_off: rapide
+      - switch.turn_off: intermittent
+
+  - platform: status
+    name: "Status échangeur d'air"
+
+
+switch:
+  # Only allow one operation mode.
+  - platform: gpio
+    name: "Vitesse lente (R1)"
+    pin: GPIO12
+    id: lent
+    on_turn_on:
+      - switch.turn_off: rapide
+
+  - platform: gpio
+    name: "Vitesse rapide (R2)" 
+    pin: GPIO5
+    id: rapide
+    on_turn_on:
+      - switch.turn_off: lent
+
+  - platform: template
+    name: "Intermittent: 20m lent/40m arrêt"
+    id: intermittent
+    restore_mode: RESTORE_DEFAULT_ON
+    optimistic: true
+    on_turn_on:
+      - script.execute: demarrage_intermittent
+    on_turn_off:
+      - script.execute: arret_intermittent
+
+output:
+  # Register the blue LED as a dimmable output ....
+  - platform: esp8266_pwm
+    id: blue_led
+    pin: GPIO13
+    inverted: true
+
+  # Register the two unused relays. Relay R4 starts high at startup if not declared here.
+  - platform: gpio
+    id: r3
+    pin: GPIO4
+  - platform: gpio
+    id: r4
+    pin: GPIO15
