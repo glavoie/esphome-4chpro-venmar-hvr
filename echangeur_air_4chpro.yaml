@@ -1,6 +1,21 @@
+# Settings for intermittent mode
+substitutions:
+  intmt_dur_slow: 20min
+  intmt_dur_stopped: 100min
+
+
 esphome:
   name: echangeur-air
   friendly_name: "Échangeur d'air"
+  on_boot:
+    - priority: -100
+      then:
+        - text_sensor.template.publish:
+            id: intmt_text_dur_slow
+            state: $intmt_dur_slow
+        - text_sensor.template.publish:
+            id: intmt_text_dur_stopped
+            state: $intmt_dur_stopped
 
 
 esp8266:
@@ -38,32 +53,43 @@ wifi:
     password: !secret admin_password
 
 
-# Intermittent mode. Runs for 20 minutes on slow speed, then stop for 40 minutes.
+# Display intermitent mode duration.
+text_sensor:
+  - platform: template
+    name: "Intermittent: durée lente"
+    id: intmt_text_dur_slow
+
+  - platform: template
+    name: "Intermittent: durée arrêt"
+    id: intmt_text_dur_stopped
+
+
+# Scripts for managing intermittent mode.
 script:
-  - id: demarrage_intermittent
+  - id: intmt_trigger_enable
     then:
-      - script.stop: arret_40min
-      - script.execute: lent_20min
+      - script.stop: intmt_script_stopped
+      - script.execute: intmt_script_slow
 
-  - id: arret_intermittent
+  - id: intmt_trigger_disable
     then:
-      - script.stop: lent_20min
-      - script.stop: arret_40min
+      - script.stop: intmt_script_stopped
+      - script.stop: intmt_script_slow
 
-  - id: lent_20min
+  - id: intmt_script_slow
     mode: single
     then:
-      - switch.turn_on: lent
-      - delay: 20min
-      - script.execute: arret_40min
+      - switch.turn_on: switch_slow
+      - delay: $intmt_dur_slow
+      - script.execute: intmt_script_stopped
 
-  - id: arret_40min
+  - id: intmt_script_stopped
     mode: single
     then:
-      - switch.turn_off: lent
-      - switch.turn_off: rapide
-      - delay: 40min
-      - script.execute: lent_20min
+      - switch.turn_off: switch_slow
+      - switch.turn_off: switch_fast
+      - delay: $intmt_dur_stopped
+      - script.execute: intmt_script_slow
 
 
 binary_sensor:
@@ -74,9 +100,9 @@ binary_sensor:
         input: true
         pullup: true
       inverted: true
-    name: "Vitesse lente (R1)"
+    name: "Bouton R1: Vitesse lente"
     on_press:
-      - switch.turn_on: lent
+      - switch.turn_on: switch_slow
 
   - platform: gpio
     pin:
@@ -85,9 +111,9 @@ binary_sensor:
         input: true
         pullup: true
       inverted: true
-    name: "Vitesse rapide (R2)"
+    name: "Bouton R2: Vitesse rapide"
     on_press:
-      - switch.turn_on: rapide
+      - switch.turn_on: switch_fast
 
   - platform: gpio
     pin:
@@ -96,9 +122,9 @@ binary_sensor:
         input: true
         pullup: true
       inverted: true
-    name: "Intermittent: 20m lent/40m arrêt (R3)"
+    name: "Bouton R3: Intermittent"
     on_press:
-      - switch.turn_on: intermittent
+      - switch.turn_on: switch_intmt
 
   - platform: gpio
     pin:
@@ -107,41 +133,45 @@ binary_sensor:
         input: true
         pullup: true
       inverted: true
-    name: "Arrêt complet (R4)"
+    name: "Bouton R4: Arrêt complet"
     on_press:
-      - switch.turn_off: lent
-      - switch.turn_off: rapide
-      - switch.turn_off: intermittent
+      - switch.turn_off: switch_slow
+      - switch.turn_off: switch_fast
+      - switch.turn_off: switch_intmt
 
   - platform: status
     name: "Status échangeur d'air"
 
 
 switch:
-  # Only allow one operation mode.
-  - platform: gpio
-    name: "Vitesse lente (R1)"
+  # Relay R1
+  - platform: gpio 
+    name: "Vitesse lente"
     pin: GPIO12
-    id: lent
+    id: switch_slow
     on_turn_on:
-      - switch.turn_off: rapide
+      # Only allow one operation mode.
+      - switch.turn_off: switch_fast
 
+  # Relay R2
   - platform: gpio
-    name: "Vitesse rapide (R2)" 
+    name: "Vitesse rapide" 
     pin: GPIO5
-    id: rapide
+    id: switch_fast
     on_turn_on:
-      - switch.turn_off: lent
+      # Only allow one operation mode.
+      - switch.turn_off: switch_slow
 
   - platform: template
-    name: "Intermittent: 20m lent/40m arrêt"
-    id: intermittent
+    name: "Intermittent"
+    id: switch_intmt
     restore_mode: RESTORE_DEFAULT_ON
     optimistic: true
     on_turn_on:
-      - script.execute: demarrage_intermittent
+      - script.execute: intmt_trigger_enable
     on_turn_off:
-      - script.execute: arret_intermittent
+      - script.execute: intmt_trigger_disable
+
 
 output:
   # Register the blue LED as a dimmable output ....
