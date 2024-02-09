@@ -1,7 +1,7 @@
 # Settings for intermittent mode
 substitutions:
   intmt_dur_slow: 20min
-  intmt_dur_stopped: 100min
+  intmt_dur_recirculation: 100min
 
 
 esphome:
@@ -14,8 +14,8 @@ esphome:
             id: intmt_text_dur_slow
             state: $intmt_dur_slow
         - text_sensor.template.publish:
-            id: intmt_text_dur_stopped
-            state: $intmt_dur_stopped
+            id: intmt_text_dur_recirculation
+            state: $intmt_dur_recirculation
 
 
 esp8266:
@@ -60,8 +60,8 @@ text_sensor:
     id: intmt_text_dur_slow
 
   - platform: template
-    name: "Intermittent: durée arrêt"
-    id: intmt_text_dur_stopped
+    name: "Intermittent: durée re-circulation"
+    id: intmt_text_dur_recirculation
 
 
 # Scripts for managing intermittent mode.
@@ -86,9 +86,8 @@ script:
   - id: intmt_script_stopped
     mode: single
     then:
-      - switch.turn_off: switch_slow
-      - switch.turn_off: switch_fast
-      - delay: $intmt_dur_stopped
+      - switch.turn_on: switch_recirculation
+      - delay: $intmt_dur_recirculation
       - script.execute: intmt_script_slow
 
 
@@ -102,7 +101,7 @@ binary_sensor:
       inverted: true
     name: "Bouton R1: Vitesse lente"
     on_press:
-      - switch.turn_on: switch_slow
+      - switch.toggle: switch_slow
 
   - platform: gpio
     pin:
@@ -113,7 +112,7 @@ binary_sensor:
       inverted: true
     name: "Bouton R2: Vitesse rapide"
     on_press:
-      - switch.turn_on: switch_fast
+      - switch.toggle: switch_fast
 
   - platform: gpio
     pin:
@@ -122,9 +121,9 @@ binary_sensor:
         input: true
         pullup: true
       inverted: true
-    name: "Bouton R3: Intermittent"
+    name: "Bouton R3: Re-circulation"
     on_press:
-      - switch.turn_on: switch_intmt
+      - switch.toggle: switch_recirculation
 
   - platform: gpio
     pin:
@@ -137,6 +136,7 @@ binary_sensor:
     on_press:
       - switch.turn_off: switch_slow
       - switch.turn_off: switch_fast
+      - switch.turn_off: switch_recirculation
       - switch.turn_off: switch_intmt
 
   - platform: status
@@ -152,6 +152,7 @@ switch:
     on_turn_on:
       # Only allow one operation mode.
       - switch.turn_off: switch_fast
+      - switch.turn_off: switch_recirculation
 
   # Relay R2
   - platform: gpio
@@ -161,6 +162,17 @@ switch:
     on_turn_on:
       # Only allow one operation mode.
       - switch.turn_off: switch_slow
+      - switch.turn_off: switch_recirculation
+
+  # Relay R3
+  - platform: gpio
+    name: "Re-circulation" 
+    pin: GPIO4
+    id: switch_recirculation
+    on_turn_on:
+      # Only allow one operation mode.
+      - switch.turn_off: switch_slow
+      - switch.turn_off: switch_fast
 
   - platform: template
     name: "Intermittent"
@@ -180,10 +192,7 @@ output:
     pin: GPIO13
     inverted: true
 
-  # Register the two unused relays. Relay R4 starts high at startup if not declared here.
-  - platform: gpio
-    id: r3
-    pin: GPIO4
+  # Register the unused relay. Relay R4 starts high at startup if not declared here.
   - platform: gpio
     id: r4
     pin: GPIO15
