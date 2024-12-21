@@ -35,6 +35,7 @@ api:
 
 # Enable OTA firmware update.
 ota:
+  platform: esphome
   password: !secret admin_password
 
 
